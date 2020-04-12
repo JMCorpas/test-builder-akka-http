@@ -4,9 +4,6 @@ Akka http basic example with custom command SBT to build Alpine Docker image
 The example image is 96 MB
 ```
 
-## Pre-requisites
-* jdeps in PATH
-
 ## Building Docker image
 * Use SBT command: build
 

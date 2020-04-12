@@ -1,19 +1,17 @@
 
-
 name := "test"
 version := "0.1"
 scalaVersion := "2.13.1"
 lazy val akkaHttpVersion = "10.1.11"
 lazy val akkaVersion    = "2.6.4"
 lazy val dockerImageTag = "test:0.1"
-lazy val builderDockerFile = "deployment/Dockerfile_Builder"
+lazy val builderJdkDockerFile = "azul/zulu-openjdk-alpine:11"
 lazy val DockerFile = "deployment/Dockerfile"
 
 lazy val root = (project in file("."))
   .settings(
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-http"                % akkaHttpVersion,
-      "com.typesafe.akka" %% "akka-http-spray-json"     % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-actor-typed"         % akkaVersion,
       "com.typesafe.akka" %% "akka-stream"              % akkaVersion,
       "ch.qos.logback"    % "logback-classic"           % "1.2.3",
@@ -39,14 +37,24 @@ build := {
   import scala.reflect.io.Directory
 
   val logger = streams.value.log
-  val fatJar = (assemblyOutputPath in assembly).value
+  val sourceFatJar = (assemblyOutputPath in assembly).value
   val stageDir = target.value / "customJdk" / "stage"
+  val tarjetFatJar = stageDir / sourceFatJar.name
+
   stageDir.mkdirs()
-
-  Files.copy(fatJar.toPath,(stageDir / fatJar.name).toPath,StandardCopyOption.REPLACE_EXISTING)
-
-  val jdeps = Seq ("jdeps", "--list-deps", fatJar.toPath.toString)
+  Files.copy(sourceFatJar.toPath,tarjetFatJar.toPath,StandardCopyOption.REPLACE_EXISTING)
   var dependencies : List[String] = List()
+  val jdepsCommand = Seq(
+    "docker",
+    "run",
+    "--rm",
+    "-v",
+    s"${stageDir.getAbsolutePath}:/deps",
+    builderJdkDockerFile,
+    "/usr/lib/jvm/zulu11-ca/bin/jdeps",
+    "--list-deps",
+    "/deps/" + sourceFatJar.name
+  )
 
   def filterDeps (dep: String) : List[String] = {
     val depTrim = dep.replaceAll(" ", "")
@@ -60,28 +68,17 @@ build := {
     }
   }
 
-  sys.process.Process(jdeps) ! sys.process.ProcessLogger(dep => dependencies = dependencies ++ filterDeps(dep)) match {
+  logger.info(s"Getting dependencies")
+  logger.info(s"Running: ${jdepsCommand.mkString(" ")}")
+  sys.process.Process(jdepsCommand) ! sys.process.ProcessLogger(dep => {
+    println(dep)
+    dependencies = dependencies ++ filterDeps(dep)
+  }
+  ) match {
     case 0 => logger.info(dependencies.toString)
     case _ => sys.error(s"Jdeps error: $dependencies")
   }
   dependencies = dependencies.distinct
-
-  val createBuilderCommand = Seq(
-    "docker",
-    "build",
-    "-t",
-    s"builder$dockerImageTag",
-    "-f",
-    (baseDirectory.value / builderDockerFile).getAbsolutePath,
-    "."
-  )
-
-  logger.info(s"Building builder docker Image with tag builder$dockerImageTag")
-  logger.info(s"Running: ${createBuilderCommand.mkString(" ")}")
-  sys.process.Process(createBuilderCommand, None) ! streams.value.log match {
-    case 0 => logger.info ("Successful")
-    case r => sys.error(s"Failed to building docker image, exit status: " + r)
-  }
 
   val jdkDir = Directory (stageDir / "jdk")
   jdkDir.deleteRecursively()
@@ -97,7 +94,8 @@ build := {
     user,
     "-v",
     s"${stageDir.getAbsolutePath}:/customjdk",
-    s"builder$dockerImageTag",
+    builderJdkDockerFile,
+    "/usr/lib/jvm/zulu11-ca/bin/jlink",
     "--compress=1",
     "--strip-debug",
     "--no-header-files",
@@ -119,7 +117,7 @@ build := {
     "--build-arg",
     "JDK=jdk",
     "--build-arg",
-    "APP=" + fatJar.name,
+    "APP=" + sourceFatJar.name,
     "-t",
     dockerImageTag,
     "-f",

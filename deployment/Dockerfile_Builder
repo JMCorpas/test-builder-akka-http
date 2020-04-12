@@ -1,5 +1,0 @@
-FROM azul/zulu-openjdk-alpine:11
-
-ENV PATH=$PATH:$JAVA_HOME/bin
-ENTRYPOINT ["jlink"]
-
