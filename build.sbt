@@ -29,14 +29,6 @@ lazy val root = (project in file("."))
 
   )
 
-val aa = taskKey[Unit](
-  "Create docker image with custom Zulu JVM"
-)
-aa := {
-
-
-}
-
 val build = taskKey[Unit](
   "Create docker image with custom Zulu JVM"
 )
