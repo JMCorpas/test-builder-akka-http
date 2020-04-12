@@ -43,6 +43,7 @@ build := {
 
   stageDir.mkdirs()
   Files.copy(sourceFatJar.toPath,tarjetFatJar.toPath,StandardCopyOption.REPLACE_EXISTING)
+
   var dependencies : List[String] = List()
   val jdepsCommand = Seq(
     "docker",
@@ -51,7 +52,7 @@ build := {
     "-v",
     s"${stageDir.getAbsolutePath}:/deps",
     builderJdkDockerFile,
-    "/usr/lib/jvm/zulu11-ca/bin/jdeps",
+    "/usr/lib/jvm/zulu11/bin/jdeps",
     "--list-deps",
     "/deps/" + sourceFatJar.name
   )
@@ -95,7 +96,7 @@ build := {
     "-v",
     s"${stageDir.getAbsolutePath}:/customjdk",
     builderJdkDockerFile,
-    "/usr/lib/jvm/zulu11-ca/bin/jlink",
+    "/usr/lib/jvm/zulu11/bin/jlink",
     "--compress=1",
     "--strip-debug",
     "--no-header-files",
